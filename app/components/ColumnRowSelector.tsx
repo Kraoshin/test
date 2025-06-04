@@ -8,7 +8,7 @@ interface ColumnRowSelectorProps {
   columnTypes: Record<string, string>;
   selectedColumns: string[];
   onColumnToggle: (col: string) => void;
-  onRowFilter: (filter: Record<string, any>) => void;
+  onRowFilter: (filter: Record<string, { operator: string; value: string }>) => void;
 }
 
 const operatorsNumber = ['=', '<', '<=', '>', '>='];
@@ -21,7 +21,7 @@ export default function ColumnRowSelector({
   onColumnToggle,
   onRowFilter,
 }: ColumnRowSelectorProps) {
-  const [localFilters, setLocalFilters] = useState<Record<string, any>>({});
+  const [localFilters, setLocalFilters] = useState<Record<string, { operator: string; value: string }>>({});
 
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -37,10 +37,12 @@ export default function ColumnRowSelector({
         delete newFilters[column];
       } else {
         const type = columnTypes[column]?.toLowerCase();
+
         if (
           type?.includes('int') ||
           type?.includes('numeric') ||
-          type?.includes('float')
+          type?.includes('float') ||
+          type?.includes('double')
         ) {
           newFilters[column] = {
             operator: operator || '=',
@@ -48,12 +50,25 @@ export default function ColumnRowSelector({
           };
         } else if (type?.includes('bool')) {
           if (value === 'true' || value === 'false') {
-            newFilters[column] = value === 'true';
+            newFilters[column] = {
+              operator: '=',
+              value: value, // garder 'true' ou 'false' en string pour serveur
+            };
           } else {
             delete newFilters[column];
           }
+        } else if (type?.includes('uuid')) {
+          // UUID : opérateur forcé à '='
+          newFilters[column] = {
+            operator: '=',
+            value: value.trim(),
+          };
         } else {
-          newFilters[column] = value.trim();
+          // Texte : opérateur "contient" pour filtrage en LIKE
+          newFilters[column] = {
+            operator: 'contient',
+            value: value.trim(),
+          };
         }
       }
 
@@ -80,7 +95,7 @@ export default function ColumnRowSelector({
     if (type?.includes('bool')) {
       return (
         <select
-          value={filterValue === undefined ? '' : filterValue ? 'true' : 'false'}
+          value={filterValue === undefined ? '' : filterValue.value}
           onChange={(e) => handleFilterChange(column, e.target.value)}
           className="border rounded px-2 py-1"
         >
@@ -94,7 +109,8 @@ export default function ColumnRowSelector({
     if (
       type?.includes('int') ||
       type?.includes('numeric') ||
-      type?.includes('float')
+      type?.includes('float') ||
+      type?.includes('double')
     ) {
       const operator = filterValue?.operator || '=';
       const value = filterValue?.value || '';
@@ -123,10 +139,37 @@ export default function ColumnRowSelector({
       );
     }
 
+    if (type?.includes('uuid')) {
+      const value = filterValue?.value || '';
+      const operator = '=';
+
+      return (
+        <div className="flex space-x-1">
+          <select
+            value={operator}
+            disabled
+            className="border rounded px-2 py-1 bg-gray-200 cursor-not-allowed"
+          >
+            <option value="=">=</option>
+          </select>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => handleFilterChange(column, e.target.value, operator)}
+            placeholder="UUID exact"
+            className="border rounded px-2 py-1 flex-grow"
+          />
+        </div>
+      );
+    }
+
+    // Texte classique (contient)
+    const value = filterValue?.value || '';
+
     return (
       <input
         type="text"
-        value={filterValue || ''}
+        value={value}
         onChange={(e) => handleFilterChange(column, e.target.value)}
         placeholder="Filtrer"
         className="border rounded px-2 py-1 w-full"

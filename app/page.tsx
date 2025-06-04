@@ -5,6 +5,11 @@ import { connectDatabase, getTableNames, getColumnTypes, fetchData } from './act
 import ColumnRowSelector from './components/ColumnRowSelector';
 import DateTimeFilter from './components/DateTimeFilter';
 
+type FilterValue = {
+  operator: string;
+  value: string;
+};
+
 export default function HomePage() {
   const [connectionString, setConnectionString] = useState('');
   const [connected, setConnected] = useState(false);
@@ -14,7 +19,7 @@ export default function HomePage() {
   const [columns, setColumns] = useState<string[]>([]);
   const [columnTypes, setColumnTypes] = useState<Record<string, string>>({});
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-  const [filters, setFilters] = useState<Record<string, any>>({});
+  const [filters, setFilters] = useState<Record<string, FilterValue>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -42,21 +47,55 @@ export default function HomePage() {
     })();
   }, [connected]);
 
-  // Charger colonnes, types et données à chaque changement de table ou filtres
+  // Charger colonnes et types à chaque changement de table
   useEffect(() => {
-    if (!selectedTable) return;
+    if (!selectedTable) {
+      setColumns([]);
+      setColumnTypes({});
+      setSelectedColumns([]);
+      setData([]);
+      setFilters({});
+      return;
+    }
+
     (async () => {
       setLoading(true);
       setError(null);
       try {
         const types = await getColumnTypes(selectedTable);
         setColumnTypes(types);
+
         const cols = Object.keys(types);
         setColumns(cols);
         setSelectedColumns((prev) => (prev.length === 0 ? cols : prev));
+      } catch {
+        setError('Erreur lors du chargement des colonnes/types');
+        setColumns([]);
+        setColumnTypes({});
+        setSelectedColumns([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [selectedTable]);
 
-        // Transformer filtres en strings pour la query
-        const filtersForQuery: Record<string, string> = {};
+  // Charger données quand selectedTable, filters ou columnTypes changent
+  useEffect(() => {
+    if (
+      !selectedTable ||
+      !columnTypes ||
+      Object.keys(columnTypes).length === 0
+    ) {
+      setData([]);
+      return;
+    }
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const filtersForQuery: Record<string, FilterValue> = {};
         for (const [key, val] of Object.entries(filters)) {
           if (
             val &&
@@ -65,46 +104,20 @@ export default function HomePage() {
             'value' in val &&
             val.value !== ''
           ) {
-            const op = val.operator;
-            const rawValue = val.value;
-            const type = columnTypes[key]?.toLowerCase() || '';
-
-            // Détecter si la valeur est numérique
-            const isNumberType =
-              type.includes('int') || type.includes('numeric') || type.includes('float') || type.includes('double');
-
-            // Ajouter des quotes autour des strings et dates
-            let formattedValue = rawValue;
-
-            if (isNumberType) {
-              // Essayer de parser en nombre
-              const numberValue = Number(rawValue);
-              if (isNaN(numberValue)) {
-                // Ignorer ce filtre si valeur non numérique
-                continue;
-              }
-              formattedValue = numberValue.toString();
-            } else if (type.includes('date') || type.includes('timestamp')) {
-              // Formater en ISO pour les dates (supposé bien formaté)
-              formattedValue = `'${rawValue}'`;
-            } else {
-              // Pour chaînes (varchar, text, etc)
-              formattedValue = `'${rawValue.replace(/'/g, "''")}'`; // échappement simple quote
-            }
-
-            filtersForQuery[key] = `${op} ${formattedValue}`;
+            filtersForQuery[key] = { operator: val.operator, value: val.value };
           }
         }
 
-        const rows = await fetchData(selectedTable, filtersForQuery, types);
+        const rows = await fetchData(selectedTable, filtersForQuery, columnTypes);
         setData(rows);
       } catch {
         setError('Erreur lors du chargement des données');
+        setData([]);
       } finally {
         setLoading(false);
       }
     })();
-  }, [selectedTable, filters]);
+  }, [selectedTable, filters, columnTypes]);
 
   // Toggle sélection colonne
   const toggleColumn = useCallback((column: string) => {
@@ -114,11 +127,11 @@ export default function HomePage() {
   }, []);
 
   // Mise à jour des filtres : on ne met à jour que si le filtre change vraiment
-  const handleFilterChange = useCallback((newFilter: Record<string, any>) => {
+  const handleFilterChange = useCallback((newFilter: Record<string, FilterValue>) => {
     setFilters((prev) => {
       const merged = { ...prev, ...newFilter };
       for (const key in merged) {
-        if (merged[key] === null || merged[key] === '') {
+        if (merged[key] === null || merged[key] === '' || merged[key] === undefined) {
           delete merged[key];
         }
       }
@@ -156,7 +169,10 @@ export default function HomePage() {
             placeholder="Chaîne de connexion PostgreSQL"
             className="w-full p-2 border rounded mb-2"
           />
-          <button onClick={handleConnect} className="bg-blue-500 text-white px-4 py-2 rounded">
+          <button
+            onClick={handleConnect}
+            className="bg-blue-500 text-white px-4 py-2 rounded"
+          >
             Se connecter
           </button>
         </div>
@@ -187,7 +203,10 @@ export default function HomePage() {
 
       {selectedTable && columns.length > 0 && (
         <>
-          <DateTimeFilter onFilterChange={handleFilterChange} fieldName="creationdate" />
+          <DateTimeFilter
+            onFilterChange={handleFilterChange}
+            fieldName="creationdate"
+          />
 
           <ColumnRowSelector
             tableName={selectedTable}
@@ -224,7 +243,9 @@ export default function HomePage() {
                 <tr key={i} className="hover:bg-gray-50">
                   {selectedColumns.map((col) => (
                     <td key={col} className="p-2 border-b border-gray-200">
-                      {String(row[col])}
+                      {row[col] !== null && row[col] !== undefined
+                        ? String(row[col])
+                        : ''}
                     </td>
                   ))}
                 </tr>

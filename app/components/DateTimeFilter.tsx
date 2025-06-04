@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const operators = ['=', '<', '<=', '>', '>='];
 
@@ -13,23 +13,13 @@ export default function DateTimeFilter({ onFilterChange, fieldName }: DateTimeFi
   const [operator, setOperator] = useState('=');
   const [dateValue, setDateValue] = useState('');
 
-  function handleOperatorChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setOperator(e.target.value);
-    sendFilter(e.target.value, dateValue);
-  }
-
-  function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setDateValue(e.target.value);
-    sendFilter(operator, e.target.value);
-  }
-
-  function sendFilter(op: string, val: string) {
-    if (val.trim() === '') {
+  useEffect(() => {
+    if (dateValue.trim() === '') {
       onFilterChange({ [fieldName]: null });
     } else {
-      onFilterChange({ [fieldName]: { operator: op, value: val } });
+      onFilterChange({ [fieldName]: { operator, value: dateValue } });
     }
-  }
+  }, [operator, dateValue, fieldName, onFilterChange]);
 
   return (
     <div className="mb-4 flex items-center space-x-2 max-w-md">
@@ -39,7 +29,7 @@ export default function DateTimeFilter({ onFilterChange, fieldName }: DateTimeFi
       <select
         id={`${fieldName}-operator`}
         value={operator}
-        onChange={handleOperatorChange}
+        onChange={(e) => setOperator(e.target.value)}
         className="border rounded p-1"
       >
         {operators.map((op) => (
@@ -56,7 +46,7 @@ export default function DateTimeFilter({ onFilterChange, fieldName }: DateTimeFi
         id={`${fieldName}-input`}
         type="datetime-local"
         value={dateValue}
-        onChange={handleDateChange}
+        onChange={(e) => setDateValue(e.target.value)}
         className="border rounded p-1 flex-grow"
       />
     </div>
