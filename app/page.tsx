@@ -184,7 +184,8 @@ export default function HomePage() {
           <select
             value={selectedTable || ''}
             onChange={(e) => {
-              setSelectedTable(e.target.value || null);
+              const val = e.target.value;
+              setSelectedTable(val || null);
               setFilters({});
               setSelectedColumns([]);
               setData([]);
@@ -198,6 +199,16 @@ export default function HomePage() {
               </option>
             ))}
           </select>
+
+          {/* Bouton Rafraîchir */}
+          {selectedTable && (
+            <button
+              onClick={() => setFilters({})}
+              className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Rafraîchir la table
+            </button>
+          )}
         </div>
       )}
 
